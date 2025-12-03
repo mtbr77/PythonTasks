@@ -1,6 +1,7 @@
 import cv2
 
 # создаем background subractor для генерирования foreground mask (черно белой маски движущихся объектов)
+# на основе k-Nearest Neighbor (kNN) алгоритма
 bg_subtractor = cv2.createBackgroundSubtractorKNN(history=10, dist2Threshold=700.0, detectShadows=False)
 
 def detect_significant_contours_of_motion(frame, threshold_area=400):
@@ -61,3 +62,4 @@ if __name__ == '__main__':
     # освобождаем все ресурсы выделенные под кадры и окна
     cap.release()
     cv2.destroyAllWindows()
+
