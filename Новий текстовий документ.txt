@@ -1,0 +1,55 @@
+import cv2
+import multiprocessing as mp
+import time
+
+def process_motion(frame_queue):
+    # Ініціалізація віднімача фону (Background Subtractor)
+    # varThreshold контролює чутливість (менше = чутливіше)
+    back_sub = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=True)
+    
+    while True:
+        frame = frame_queue.get()
+        if frame is None: break  # Сигнал зупинки
+
+        # 1. Створення маски руху
+        fg_mask = back_sub.apply(frame)
+
+        # 2. Очищення шуму (морфологічні операції)
+        _, fg_mask = cv2.threshold(fg_mask, 250, 255, cv2.THRESH_BINARY)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
+
+        # 3. Пошук контурів
+        contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for contour in contours:
+            if cv2.contourArea(contour) > 1000:  # Фільтр за розміром об'єкта
+                x, y, w, h = cv2.boundingRect(contour)
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(frame, "MOTION DETECTED", (10, 30), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+        cv2.imshow('Motion Detection (Worker Process)', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+if __name__ == "__main__":
+    # Створюємо чергу для передачі кадрів (ліміт 2, щоб не забивати пам'ять)
+    queue = mp.Queue(maxsize=2)
+    p = mp.Process(target=process_motion, args=(queue,))
+    p.start()
+
+    cap = cv2.VideoCapture(0) # Замініть на URL-адресу камери для IP-камер
+    
+    try:
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret: break
+
+            if not queue.full():
+                queue.put(frame)
+            
+    finally:
+        queue.put(None) # Зупиняємо дочірній процес
+        p.join()
+        cap.release()
+        cv2.destroyAllWindows()
